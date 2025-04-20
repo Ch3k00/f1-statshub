@@ -74,15 +74,42 @@ func InitLaps(db *sql.DB) error {
 			if lap.DriverNumber == 61 {
 				continue // omitir Jack Doohan
 			}
+
+			// Reemplazar valores vacíos o cero por 9999 o -1
+			lapDuration := lap.LapDuration
+			if lapDuration == 0 {
+				lapDuration = 9999.0
+			}
+
+			sector1 := lap.DurationSector1
+			if sector1 == 0 {
+				sector1 = 9999.0
+			}
+
+			sector2 := lap.DurationSector2
+			if sector2 == 0 {
+				sector2 = 9999.0
+			}
+
+			sector3 := lap.DurationSector3
+			if sector3 == 0 {
+				sector3 = 9999.0
+			}
+
+			stSpeed := lap.StSpeed
+			if stSpeed == 0 {
+				stSpeed = -1.0
+			}
+
 			_, err := db.Exec(`
 				INSERT INTO laps (
 					driver_number, session_key, lap_number, lap_duration,
 					duration_sector_1, duration_sector_2, duration_sector_3,
 					st_speed, date_start
 				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-				lap.DriverNumber, lap.SessionKey, lap.LapNumber, lap.LapDuration,
-				lap.DurationSector1, lap.DurationSector2, lap.DurationSector3,
-				lap.StSpeed, lap.DateStart,
+				lap.DriverNumber, lap.SessionKey, lap.LapNumber, lapDuration,
+				sector1, sector2, sector3,
+				stSpeed, lap.DateStart,
 			)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error insertando vuelta: %v\n", err)

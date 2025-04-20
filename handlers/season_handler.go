@@ -4,83 +4,120 @@ import (
 	"net/http"
 
 	"f1-statshub.v2/database"
-	"f1-statshub.v2/models"
 	"github.com/gin-gonic/gin"
 )
 
-func GetSeasonSummary(c *gin.Context) {
-	season := 2024 // fijo en este caso, pero podrías hacer que sea dinámico
+type Entry struct {
+	DriverNumber int
+	FullName     string
+	Team         string
+	Country      string
+	Count        int
+}
 
-	topWinners := getTopResults(`
-		SELECT d.first_name || ' ' || d.last_name, d.team_name, d.country_code, COUNT(*) as wins
+func GetSeasonSummary(c *gin.Context) {
+	// 1. Top 3 por victorias reales (última posición registrada de cada carrera)
+	rows, err := database.DB.Query(`
+		SELECT d.driver_number, d.first_name || ' ' || d.last_name AS full_name, d.team_name, d.country_code, COUNT(*) as wins
 		FROM positions p
 		JOIN drivers d ON d.driver_number = p.driver_number
-		WHERE p.position = 1
+		JOIN (
+			SELECT driver_number, session_key, MAX(date) AS latest_date
+			FROM positions
+			WHERE position = 1
+			GROUP BY session_key
+		) AS last_pos
+		ON p.driver_number = last_pos.driver_number AND p.session_key = last_pos.session_key AND p.date = last_pos.latest_date
 		GROUP BY d.driver_number
 		ORDER BY wins DESC
 		LIMIT 3
-	`, "wins")
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var topWins []Entry
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.DriverNumber, &e.FullName, &e.Team, &e.Country, &e.Count); err == nil {
+			topWins = append(topWins, e)
+		}
+	}
 
-	topFastest := getTopResults(`
-		SELECT d.first_name || ' ' || d.last_name, d.team_name, d.country_code, COUNT(*) as fastest_laps
+	// 2. Top 3 por vueltas rápidas
+	rows, err = database.DB.Query(`
+		SELECT d.driver_number, d.first_name || ' ' || d.last_name AS full_name, d.team_name, d.country_code, COUNT(*) as fastest
 		FROM laps l
 		JOIN drivers d ON d.driver_number = l.driver_number
-		WHERE (session_key, lap_duration) IN (
+		WHERE (l.session_key, l.lap_duration) IN (
 			SELECT session_key, MIN(lap_duration)
 			FROM laps
+			WHERE lap_duration < 9999
 			GROUP BY session_key
 		)
 		GROUP BY d.driver_number
-		ORDER BY fastest_laps DESC
+		ORDER BY fastest DESC
 		LIMIT 3
-	`, "fastest_laps")
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var topFastest []Entry
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.DriverNumber, &e.FullName, &e.Team, &e.Country, &e.Count); err == nil {
+			topFastest = append(topFastest, e)
+		}
+	}
 
-	topPoles := getTopResults(`
-		SELECT d.first_name || ' ' || d.last_name, d.team_name, d.country_code, COUNT(*) as poles
+	// 3. Top 3 por Pole Positions: primeras posiciones por fecha en cada sesión
+	rows, err = database.DB.Query(`
+		SELECT d.driver_number, d.first_name || ' ' || d.last_name AS full_name, d.team_name, d.country_code, COUNT(*) as poles
 		FROM positions p
 		JOIN drivers d ON d.driver_number = p.driver_number
-		JOIN sessions s ON s.session_key = p.session_key
-		WHERE p.position = 1 AND s.session_type = 'Qualifying'
+		JOIN (
+			SELECT session_key, MIN(date) as first_date
+			FROM positions
+			WHERE position = 1
+			GROUP BY session_key
+		) as pole_pos
+		ON p.session_key = pole_pos.session_key AND p.date = pole_pos.first_date AND p.position = 1
 		GROUP BY d.driver_number
 		ORDER BY poles DESC
 		LIMIT 3
-	`, "poles")
+	`)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var topPoles []Entry
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.DriverNumber, &e.FullName, &e.Team, &e.Country, &e.Count); err == nil {
+			topPoles = append(topPoles, e)
+		}
+	}
 
-	c.JSON(http.StatusOK, models.SeasonSummary{
-		Season:            season,
-		Top3Winners:       topWinners,
-		Top3FastestLaps:   topFastest,
-		Top3PolePositions: topPoles,
+	c.JSON(http.StatusOK, gin.H{
+		"season":               2024,
+		"top_3_winners":        formatEntries(topWins, "wins"),
+		"top_3_fastest_laps":   formatEntries(topFastest, "fastest_laps"),
+		"top_3_pole_positions": formatEntries(topPoles, "poles"),
 	})
 }
 
-func getTopResults(query, col string) []models.SeasonResultItem {
-	rows, err := database.DB.Query(query)
-	if err != nil {
-		return nil
-	}
-	defer rows.Close()
-
-	var results []models.SeasonResultItem
-	pos := 1
-	for rows.Next() {
-		var r models.SeasonResultItem
-		var count int
-		err := rows.Scan(&r.Driver, &r.Team, &r.Country, &count)
-		if err != nil {
-			continue
+func formatEntries(entries []Entry, key string) []gin.H {
+	var result []gin.H
+	for i, e := range entries {
+		item := gin.H{
+			"position": i + 1,
+			"driver":   e.FullName,
+			"team":     e.Team,
+			"country":  e.Country,
 		}
-		r.Position = pos
-		switch col {
-		case "wins":
-			r.Wins = count
-		case "fastest_laps":
-			r.FastestLaps = count
-		case "poles":
-			r.Poles = count
-		}
-		results = append(results, r)
-		pos++
+		item[key] = e.Count
+		result = append(result, item)
 	}
-	return results
+	return result
 }

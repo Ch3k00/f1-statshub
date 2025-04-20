@@ -18,7 +18,7 @@ func main() {
 		api.GET("/corredor", handlers.ListDrivers)
 		api.GET("/corredor/detalle/:id", handlers.GetDriverDetails)
 		api.GET("/carrera", handlers.ListSessions)
-		api.GET("/carrera/detalle/:id", handlers.GetRaceDetail) // 👈 ESTA ES LA RUTA CLAVE
+		api.GET("/carrera/detalle/:id", handlers.GetRaceDetail)
 		api.GET("/temporada/resumen", handlers.GetSeasonSummary)
 	}
 

@@ -43,10 +43,18 @@ func GetDriverDetails(c *gin.Context) {
 		return
 	}
 
+	// Obtener posiciones finales por sesión (última fecha)
 	rows, err := database.DB.Query(`
 		SELECT s.session_key, s.circuit_short_name, s.country_name, p.position
 		FROM positions p
 		JOIN sessions s ON p.session_key = s.session_key
+		JOIN (
+			SELECT driver_number, session_key, MAX(date) AS latest_date
+			FROM positions
+			GROUP BY driver_number, session_key
+		) last_pos ON p.driver_number = last_pos.driver_number
+		          AND p.session_key = last_pos.session_key
+		          AND p.date = last_pos.latest_date
 		WHERE p.driver_number = ?
 	`, driverID)
 	if err != nil {
@@ -71,6 +79,7 @@ func GetDriverDetails(c *gin.Context) {
 		}
 		rr.Race = "GP de " + country
 
+		// Conteo de victorias y top 3
 		if rr.Position == 1 {
 			wins++
 			top3++
@@ -78,18 +87,22 @@ func GetDriverDetails(c *gin.Context) {
 			top3++
 		}
 
-		// Verificar vuelta rápida
-		var minLap float64
+		// Verificar si el piloto tuvo la vuelta más rápida
+		var minLap sql.NullFloat64
 		err = database.DB.QueryRow(`
-			SELECT MIN(lap_duration) FROM laps WHERE session_key = ?
+			SELECT MIN(lap_duration)
+			FROM laps
+			WHERE session_key = ? AND lap_duration IS NOT NULL AND lap_duration < 9999
 		`, rr.SessionKey).Scan(&minLap)
 
-		if err == nil {
+		if err == nil && minLap.Valid {
 			var count int
 			err = database.DB.QueryRow(`
-				SELECT COUNT(*) FROM laps
+				SELECT COUNT(*)
+				FROM laps
 				WHERE session_key = ? AND driver_number = ? AND lap_duration = ?
-			`, rr.SessionKey, driverID, minLap).Scan(&count)
+			`, rr.SessionKey, driverID, minLap.Float64).Scan(&count)
+
 			if err == nil && count > 0 {
 				rr.FastestLap = true
 			}
@@ -98,8 +111,9 @@ func GetDriverDetails(c *gin.Context) {
 		// Velocidad máxima del piloto
 		var speed float64
 		err = database.DB.QueryRow(`
-			SELECT MAX(st_speed) FROM laps
-			WHERE driver_number = ? AND session_key = ?
+			SELECT MAX(st_speed)
+			FROM laps
+			WHERE driver_number = ? AND session_key = ? AND st_speed > 0
 		`, driverID, rr.SessionKey).Scan(&speed)
 		if err == nil {
 			rr.MaxSpeed = int(speed)
@@ -108,14 +122,15 @@ func GetDriverDetails(c *gin.Context) {
 			}
 		}
 
-		// Mejor vuelta del piloto
+		// Mejor vuelta del piloto (ignora vueltas inválidas)
 		var bestLap sql.NullFloat64
 		err = database.DB.QueryRow(`
-			SELECT MIN(lap_duration) FROM laps
-			WHERE driver_number = ? AND session_key = ?
+			SELECT MIN(lap_duration)
+			FROM laps
+			WHERE driver_number = ? AND session_key = ? AND lap_duration IS NOT NULL AND lap_duration < 9999
 		`, driverID, rr.SessionKey).Scan(&bestLap)
 		if err == nil && bestLap.Valid {
-			rr.BestLapDuration = bestLap.Float64
+			rr.BestLapDuration = &bestLap.Float64
 		}
 
 		raceResults = append(raceResults, rr)

@@ -13,11 +13,11 @@ type PerformanceSummary struct {
 }
 
 type RaceResult struct {
-	SessionKey       int     `json:"session_key"`
-	CircuitShortName string  `json:"circuit_short_name"`
-	Race             string  `json:"race"`
-	Position         int     `json:"position"`
-	FastestLap       bool    `json:"fastest_lap"`
-	MaxSpeed         int     `json:"max_speed"`
-	BestLapDuration  float64 `json:"best_lap_duration"`
+	SessionKey       int      `json:"session_key"`
+	CircuitShortName string   `json:"circuit_short_name"`
+	Race             string   `json:"race"`
+	Position         int      `json:"position"`
+	FastestLap       bool     `json:"fastest_lap"`
+	MaxSpeed         int      `json:"max_speed"`
+	BestLapDuration  *float64 `json:"best_lap_duration,omitempty"`
 }

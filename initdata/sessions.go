@@ -20,6 +20,33 @@ type Session struct {
 	DateStart        string `json:"date_start"`
 }
 
+func getRealSessionStart(sessionKey int) (string, error) {
+	url := fmt.Sprintf("https://api.openf1.org/v1/laps?session_key=%d", sessionKey)
+	resp, err := http.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var laps []map[string]interface{}
+	json.Unmarshal(body, &laps)
+
+	var minDate string
+	for _, lap := range laps {
+		if date, ok := lap["date_start"].(string); ok {
+			if minDate == "" || date < minDate {
+				minDate = date
+			}
+		}
+	}
+
+	if minDate == "" {
+		return "", fmt.Errorf("fecha real no encontrada")
+	}
+	return minDate, nil
+}
+
 func InitSessions(db *sql.DB) error {
 	// Crear tabla si no existe
 	_, err := db.Exec(`
@@ -50,17 +77,24 @@ func InitSessions(db *sql.DB) error {
 	json.Unmarshal(body, &sessions)
 
 	for _, s := range sessions {
-		_, err := db.Exec(`
+		// Obtener fecha real de inicio desde /laps
+		realStart, err := getRealSessionStart(s.SessionKey)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️ Usando fecha programada para sesión %d (%s): %v\n", s.SessionKey, s.CircuitShortName, err)
+			realStart = s.DateStart
+		}
+
+		_, err = db.Exec(`
 			INSERT OR REPLACE INTO sessions 
 			(session_key, session_name, session_type, location, country_name, year, circuit_short_name, date_start)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			s.SessionKey, s.SessionName, s.SessionType, s.Location,
-			s.CountryName, s.Year, s.CircuitShortName, s.DateStart,
+			s.CountryName, s.Year, s.CircuitShortName, realStart,
 		)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error insertando sesión %d: %v\n", s.SessionKey, err)
+			fmt.Fprintf(os.Stderr, "❌ Error insertando sesión %d: %v\n", s.SessionKey, err)
 		} else {
-			fmt.Printf("✔️ Sesión %s (%s) insertada\n", s.SessionName, s.CircuitShortName)
+			fmt.Printf("✔️ Sesión %s (%s) insertada con fecha %s\n", s.SessionName, s.CircuitShortName, realStart)
 		}
 	}
 
