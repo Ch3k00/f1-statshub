@@ -2,7 +2,11 @@ Integrantes:
 
 Joaquin Torres Cornejo 202073112-8
 Joaquin Veliz Carmona
-Bruno Bonati Maldonado 
+Bruno Bonati Maldonado 202173057-5
 
 
-Falta asegurar que los datos que aparecen ahi estan correctos, tanto en la consola como en el psotman, ademas de verificar si esto corre en la maquina virtuual, por lo demas diria que la tarea esta casi lista
+Para ejecutar el servidor asegurarse de correr bash start_server.sh o correr manualmente CGO_ENABLED=1 go run server.go para evitar errores
+
+Como grupo nos dimos cuenta de la necesidad de realizar commits por parte de todo el grupo teniendo ya lista la tarea y habiendo subido esta
+utilizando solo el PC de Joaquin Torres por comodidad, sin embargo, la tarea si fue realizada equitativamente por los integrantes del grupo, pedimos disculpas por las molestias y
+aseguramos que esto no se repetira para tareas siguientes.
