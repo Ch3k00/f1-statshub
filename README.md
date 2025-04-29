@@ -1,7 +1,7 @@
 Integrantes:
 
 Joaquin Torres Cornejo 202073112-8
-Joaquin Veliz Carmona
+Joaquin Veliz Carmona 202004065-6
 Bruno Bonati Maldonado 202173057-5
 
 
